@@ -4,14 +4,14 @@ import numpy as np
 import collections
 import pickle
 
-import d4rl
+import d4rl		# important, don't remove this
 
 
 datasets = []
 
 for env_name in ['halfcheetah', 'hopper', 'walker2d']:
-	for dataset_type in ['medium', 'medium-replay', 'expert']:
-		name = f'{env_name}-{dataset_type}-v2'
+	for dataset_type in ['medium', 'medium-replay', 'medium-expert', 'expert']:
+		name = f'{env_name}-{dataset_type}-v0'
 		env = gym.make(name)
 		dataset = env.get_dataset()
 
@@ -30,7 +30,7 @@ for env_name in ['halfcheetah', 'hopper', 'walker2d']:
 				final_timestep = dataset['timeouts'][i]
 			else:
 				final_timestep = (episode_step == 1000-1)
-			for k in ['observations', 'next_observations', 'actions', 'rewards', 'terminals']:
+			for k in ['observations', 'actions', 'rewards', 'terminals']:
 				data_[k].append(dataset[k][i])
 			if done_bool or final_timestep:
 				episode_step = 0

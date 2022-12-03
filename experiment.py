@@ -6,13 +6,12 @@ import wandb
 import argparse
 import pickle
 import random
-import sys
+from tqdm import tqdm
 
-from decision_transformer.evaluation.evaluate_episodes import evaluate_episode, evaluate_episode_rtg
-from decision_transformer.models.decision_transformer import DecisionTransformer
-from decision_transformer.models.mlp_bc import MLPBCModel
-from decision_transformer.training.act_trainer import ActTrainer
-from decision_transformer.training.seq_trainer import SequenceTrainer
+import d4rl     # important, don't remove
+from evaluate_episodes import evaluate_episode_rtg
+from decision_transformer import DecisionTransformer
+from trainer import Trainer
 
 
 def discount_cumsum(x, gamma):
@@ -32,41 +31,45 @@ def experiment(
 
     env_name, dataset = variant['env'], variant['dataset']
     model_type = variant['model_type']
+    env_version = variant['env_version']
     group_name = f'{exp_prefix}-{env_name}-{dataset}'
     exp_prefix = f'{group_name}-{random.randint(int(1e5), int(1e6) - 1)}'
 
     if env_name == 'hopper':
-        env = gym.make('Hopper-v3')
+        if env_version == 2:
+            env = gym.make('Hopper-v2')
+        else:   # env_version == 0
+            env = gym.make(f'{env_name}-{dataset}-v0')
+
         max_ep_len = 1000
         env_targets = [3600, 1800]  # evaluation conditioning targets
         scale = 1000.  # normalization for rewards/returns
     elif env_name == 'halfcheetah':
-        env = gym.make('HalfCheetah-v3')
+        if env_version == 2:
+            env = gym.make('HalfCheetah-v2')
+        else:   # env_version == 0
+            env = gym.make(f'{env_name}-{dataset}-v0')
+
         max_ep_len = 1000
         env_targets = [12000, 6000]
         scale = 1000.
     elif env_name == 'walker2d':
-        env = gym.make('Walker2d-v3')
+        if env_version == 2:
+            env = gym.make('Walker2d-v2')
+        else:   # env_version == 0
+            env = gym.make(f'{env_name}-{dataset}-v0')
+
         max_ep_len = 1000
         env_targets = [5000, 2500]
         scale = 1000.
-    elif env_name == 'reacher2d':
-        from decision_transformer.envs.reacher_2d import Reacher2dEnv
-        env = Reacher2dEnv()
-        max_ep_len = 100
-        env_targets = [76, 40]
-        scale = 10.
     else:
         raise NotImplementedError
-
-    if model_type == 'bc':
-        env_targets = env_targets[:1]  # since BC ignores target, no need for different evaluations
 
     state_dim = env.observation_space.shape[0]
     act_dim = env.action_space.shape[0]
 
     # load dataset
-    dataset_path = f'data/{env_name}-{dataset}-v2.pkl'
+    dataset_path = f'data/{env_name}-{dataset}-v{env_version}.pkl'
     with open(dataset_path, 'rb') as f:
         trajectories = pickle.load(f)
 
@@ -89,7 +92,7 @@ def experiment(
     num_timesteps = sum(traj_lens)
 
     print('=' * 50)
-    print(f'Starting new experiment: {env_name} {dataset}')
+    print(f'Starting new experiment: {env_name} {dataset} v{env_version}')
     print(f'{len(traj_lens)} trajectories, {num_timesteps} timesteps found')
     print(f'Average return: {np.mean(returns):.2f}, std: {np.std(returns):.2f}')
     print(f'Max return: {np.max(returns):.2f}, min: {np.min(returns):.2f}')
@@ -112,7 +115,7 @@ def experiment(
         ind -= 1
     sorted_inds = sorted_inds[-num_trajectories:]
 
-    # used to reweight sampling so we sample according to timesteps instead of trajectories
+    # used to reweigh sampling, so we sample according to timesteps instead of trajectories
     p_sample = traj_lens[sorted_inds] / sum(traj_lens[sorted_inds])
 
     def get_batch(batch_size=256, max_len=K):
@@ -120,7 +123,7 @@ def experiment(
             np.arange(num_trajectories),
             size=batch_size,
             replace=True,
-            p=p_sample,  # reweights so we sample according to timesteps
+            p=p_sample,  # reweighs so we sample according to timesteps
         )
 
         s, a, r, d, rtg, timesteps, mask = [], [], [], [], [], [], []
@@ -166,37 +169,25 @@ def experiment(
     def eval_episodes(target_rew):
         def fn(model):
             returns, lengths = [], []
-            for _ in range(num_eval_episodes):
+            for _ in tqdm(range(num_eval_episodes)):
                 with torch.no_grad():
-                    if model_type == 'dt':
-                        ret, length = evaluate_episode_rtg(
-                            env,
-                            state_dim,
-                            act_dim,
-                            model,
-                            max_ep_len=max_ep_len,
-                            scale=scale,
-                            target_return=target_rew/scale,
-                            mode=mode,
-                            state_mean=state_mean,
-                            state_std=state_std,
-                            device=device,
-                        )
-                    else:
-                        ret, length = evaluate_episode(
-                            env,
-                            state_dim,
-                            act_dim,
-                            model,
-                            max_ep_len=max_ep_len,
-                            target_return=target_rew/scale,
-                            mode=mode,
-                            state_mean=state_mean,
-                            state_std=state_std,
-                            device=device,
-                        )
+                    ret, length = evaluate_episode_rtg(
+                        env,
+                        state_dim,
+                        act_dim,
+                        model,
+                        max_ep_len=max_ep_len,
+                        scale=scale,
+                        target_return=target_rew/scale,
+                        mode=mode,
+                        state_mean=state_mean,
+                        state_std=state_std,
+                        device=device,
+                    )
+
                 returns.append(ret)
                 lengths.append(length)
+
             return {
                 f'target_{target_rew}_return_mean': np.mean(returns),
                 f'target_{target_rew}_return_std': np.std(returns),
@@ -219,14 +210,57 @@ def experiment(
             n_positions=1024,
             resid_pdrop=variant['dropout'],
             attn_pdrop=variant['dropout'],
+            model_type='dt'
         )
-    elif model_type == 'bc':
-        model = MLPBCModel(
+    elif model_type in ('debra', 'roberta'):
+        model = DecisionTransformer(
             state_dim=state_dim,
             act_dim=act_dim,
             max_length=K,
+            max_ep_len=max_ep_len,
+            hidden_size=variant['embed_dim'],
+            num_hidden_layers=variant['n_layer'],
+            num_attention_heads=variant['n_head'],
+            intermidiate_size=4 * variant['embed_dim'],
+            hidden_act=variant['activation_function'],
+            max_position_embeddings=1024,
+            hidden_dropout_prob=variant['dropout'],
+            attention_probs_dropoout_prob=variant['dropout'],
+            model_type=model_type
+        )
+    elif model_type == 'badebra':
+        model = DecisionTransformer(
+            state_dim=state_dim,
+            act_dim=act_dim,
+            max_length=K,
+            max_ep_len=max_ep_len,
+            hidden_size=variant['embed_dim'],
+            d_model=variant['embed_dim'],
+            encoder_layers=variant['n_layer'],
+            decoder_layers=variant['n_layer'],
+            encoder_attention_heads=variant['n_head'],
+            decoder_attention_heads=variant['n_head'],
+            encoder_ffn_dim=4 * variant['embed_dim'],
+            decoder_ffn_dim=4*variant['embed_dim'],
+            activation_function=variant['activation_function'],
+            n_positions=1024,
+            dropout=variant['dropout'],
+            attention_dropout=variant['dropout'],
+            model_type='badebra'
+        )
+    elif model_type == 'debraxl':
+        model = DecisionTransformer(
+            state_dim=state_dim,
+            act_dim=act_dim,
+            max_length=K,
+            max_ep_len=max_ep_len,
             hidden_size=variant['embed_dim'],
             n_layer=variant['n_layer'],
+            n_head=variant['n_head'],
+            d_inner=4*variant['embed_dim'],
+            ff_activation=variant['activation_function'],
+            dropout=variant['dropout'],
+            model_type='debraxl'
         )
     else:
         raise NotImplementedError
@@ -244,26 +278,15 @@ def experiment(
         lambda steps: min((steps+1)/warmup_steps, 1)
     )
 
-    if model_type == 'dt':
-        trainer = SequenceTrainer(
-            model=model,
-            optimizer=optimizer,
-            batch_size=batch_size,
-            get_batch=get_batch,
-            scheduler=scheduler,
-            loss_fn=lambda s_hat, a_hat, r_hat, s, a, r: torch.mean((a_hat - a)**2),
-            eval_fns=[eval_episodes(tar) for tar in env_targets],
-        )
-    elif model_type == 'bc':
-        trainer = ActTrainer(
-            model=model,
-            optimizer=optimizer,
-            batch_size=batch_size,
-            get_batch=get_batch,
-            scheduler=scheduler,
-            loss_fn=lambda s_hat, a_hat, r_hat, s, a, r: torch.mean((a_hat - a)**2),
-            eval_fns=[eval_episodes(tar) for tar in env_targets],
-        )
+    trainer = Trainer(
+        model=model,
+        optimizer=optimizer,
+        batch_size=batch_size,
+        get_batch=get_batch,
+        scheduler=scheduler,
+        loss_fn=lambda s_hat, a_hat, r_hat, s, a, r: torch.mean((a_hat - a)**2),
+        eval_fns=[eval_episodes(tar) for tar in env_targets],
+    )
 
     if log_to_wandb:
         wandb.init(
@@ -288,7 +311,13 @@ if __name__ == '__main__':
     parser.add_argument('--K', type=int, default=20)
     parser.add_argument('--pct_traj', type=float, default=1.)
     parser.add_argument('--batch_size', type=int, default=64)
-    parser.add_argument('--model_type', type=str, default='dt')  # dt for decision transformer, bc for behavior cloning
+
+    # dt for decision transformer, debra for bert, rodebra for roberta, badebra for bart, debraxl for xlnet
+    parser.add_argument('--model_type', type=str, default='dt')
+
+    # version can be 0 or 2
+    parser.add_argument('--env_version', type=int, default=0)
+
     parser.add_argument('--embed_dim', type=int, default=128)
     parser.add_argument('--n_layer', type=int, default=3)
     parser.add_argument('--n_head', type=int, default=1)
@@ -301,8 +330,7 @@ if __name__ == '__main__':
     parser.add_argument('--max_iters', type=int, default=10)
     parser.add_argument('--num_steps_per_iter', type=int, default=10000)
     parser.add_argument('--device', type=str, default='cuda')
-    parser.add_argument('--log_to_wandb', '-w', type=bool, default=False)
-    
-    args = parser.parse_args()
+    parser.add_argument('--log_to_wandb', '-w', type=bool, default=True)
 
+    args = parser.parse_args()
     experiment('gym-experiment', variant=vars(args))

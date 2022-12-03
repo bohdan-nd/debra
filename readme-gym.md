@@ -26,7 +26,13 @@ python download_d4rl_datasets.py
 Experiments can be reproduced with the following:
 
 ```
-python experiment.py --env hopper --dataset medium --model_type dt
+python experiment.py --env hopper --dataset medium --env_version 0 --model_type dt
 ```
 
-Adding `-w True` will log results to Weights and Biases.
+Possible options:
+```
+--env: hopper, halfcheetah, walker2d
+--dataset: medium, medium-replay, medium-expert, expert
+--env_version: 0, 2
+--model_type: dt, debra, rodebra, badebra, debraxl
+```

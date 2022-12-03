@@ -1,14 +1,11 @@
-import numpy as np
 import torch
 import torch.nn as nn
 
 import transformers
-
-from decision_transformer.models.model import TrajectoryModel
-from decision_transformer.models.trajectory_gpt2 import GPT2Model
+from transformers import RobertaModel, BertModel, GPT2Model, BartModel, XLNetModel
 
 
-class DecisionTransformer(TrajectoryModel):
+class DecisionTransformer(nn.Module):
 
     """
     This model uses GPT to model (Return_1, state_1, action_1, Return_2, state_2, ...)
@@ -19,23 +16,66 @@ class DecisionTransformer(TrajectoryModel):
             state_dim,
             act_dim,
             hidden_size,
+            model_type,
             max_length=None,
             max_ep_len=4096,
             action_tanh=True,
             **kwargs
     ):
-        super().__init__(state_dim, act_dim, max_length=max_length)
+        super().__init__()
 
+        self.state_dim = state_dim
+        self.act_dim = act_dim
+        self.max_length = max_length
         self.hidden_size = hidden_size
-        config = transformers.GPT2Config(
-            vocab_size=1,  # doesn't matter -- we don't use the vocab
-            n_embd=hidden_size,
-            **kwargs
-        )
+
+        if model_type == 'dt':
+            config = transformers.GPT2Config(
+                vocab_size=1,  # doesn't matter -- we don't use the vocab
+                n_embd=hidden_size,
+                **kwargs
+            )
+        elif model_type == 'debra':
+            config = transformers.BertConfig(
+                vocab_size=1,  # doesn't matter -- we don't use the vocab
+                hidden_size=hidden_size,
+                **kwargs
+            )
+        elif model_type == 'rodebra':
+            config = transformers.RobertaConfig(
+                vocab_size=2,  # doesn't matter -- we don't use the vocab
+                hidden_size=hidden_size,
+                **kwargs
+            )
+        elif model_type == 'badebra':
+            config = transformers.BartConfig(
+                vocab_size=2,  # doesn't matter -- we don't use the vocab
+                hidden_size=hidden_size,
+                **kwargs
+            )
+        elif model_type == 'debraxl':
+            config = transformers.XLNetConfig(
+                vocab_size=2,  # doesn't matter -- we don't use the vocab
+                hidden_size=hidden_size,
+                **kwargs
+            )
+        else:
+            raise NotImplemented
 
         # note: the only difference between this GPT2Model and the default Huggingface version
         # is that the positional embeddings are removed (since we'll add those ourselves)
-        self.transformer = GPT2Model(config)
+        if model_type == 'dt':
+            self.transformer = GPT2Model(config)
+        elif model_type == 'debra':
+            self.transformer = BertModel(config)
+        elif model_type == 'rodebra':
+            self.transformer = RobertaModel(config)
+        elif model_type == 'badebra':
+            self.transformer = BartModel(config)
+        elif model_type == 'debraxl':
+            self.transformer = XLNetModel(config)
+        else:
+            raise NotImplemented
 
         self.embed_timestep = nn.Embedding(max_ep_len, hidden_size)
         self.embed_return = torch.nn.Linear(1, hidden_size)

@@ -2,6 +2,7 @@ import numpy as np
 import torch
 
 import time
+from tqdm import tqdm
 
 
 class Trainer:
@@ -26,7 +27,7 @@ class Trainer:
         train_start = time.time()
 
         self.model.train()
-        for _ in range(num_steps):
+        for _ in tqdm(range(num_steps)):
             train_loss = self.train_step()
             train_losses.append(train_loss)
             if self.scheduler is not None:
@@ -59,20 +60,29 @@ class Trainer:
         return logs
 
     def train_step(self):
-        states, actions, rewards, dones, attention_mask, returns = self.get_batch(self.batch_size)
-        state_target, action_target, reward_target = torch.clone(states), torch.clone(actions), torch.clone(rewards)
+        states, actions, rewards, dones, rtg, timesteps, attention_mask = self.get_batch(self.batch_size)
+        action_target = torch.clone(actions)
 
         state_preds, action_preds, reward_preds = self.model.forward(
-            states, actions, rewards, masks=None, attention_mask=attention_mask, target_return=returns,
+            states, actions, rewards, rtg[:, :-1], timesteps, attention_mask=attention_mask,
         )
 
-        # note: currently indexing & masking is not fully correct
+        act_dim = action_preds.shape[2]
+        action_preds = action_preds.reshape(-1, act_dim)[attention_mask.reshape(-1) > 0]
+        action_target = action_target.reshape(-1, act_dim)[attention_mask.reshape(-1) > 0]
+
         loss = self.loss_fn(
-            state_preds, action_preds, reward_preds,
-            state_target[:,1:], action_target, reward_target[:,1:],
+            None, action_preds, None,
+            None, action_target, None,
         )
+
         self.optimizer.zero_grad()
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), .25)
         self.optimizer.step()
+
+        with torch.no_grad():
+            self.diagnostics['training/action_error'] = torch.mean(
+                (action_preds - action_target) ** 2).detach().cpu().item()
 
         return loss.detach().cpu().item()
