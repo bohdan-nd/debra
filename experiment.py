@@ -34,8 +34,8 @@ def experiment(
     env_name, dataset = variant['env'], variant['dataset']
     model_type = variant['model_type']
     env_version = variant['env_version']
-    group_name = f'{exp_prefix}-{env_name}-{dataset}-v{env_version}'
-    exp_prefix = f'{group_name}-{random.randint(int(1e5), int(1e6) - 1)}'
+    group_name = f'{exp_prefix}-{env_name}-{dataset}'
+    exp_prefix = f'{group_name}-v{env_version}-{random.randint(int(1e5), int(1e6) - 1)}'
 
     if env_name == 'hopper':
         if env_version == 2:
@@ -314,7 +314,7 @@ def experiment(
         wandb.init(
             name=exp_prefix,
             group=group_name,
-            project='decision-transformer',
+            project='DEBRA-with-weights',
             config=variant
         )
         # wandb.watch(model)  # wandb has some bug
@@ -324,14 +324,11 @@ def experiment(
     
     experiment_parameters = {
         "env_id": env_id,
-        "state_dim": state_dim,
-        "act_dim": act_dim,
         "max_ep_len": max_ep_len,
         "scale": scale,
         "env_targets": env_targets,
         "mode": mode,
-        "state_mean": state_mean,
-        "state_std": state_std,
+        "dataset_path": dataset_path
     }
 
     with open(f'{folder_path}/config.json', 'w', encoding='utf-8') as file:
