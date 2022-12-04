@@ -1,12 +1,13 @@
-import gym
-import numpy as np
-import torch
-import wandb
-
+import os
 import argparse
 import pickle
 import random
 from tqdm import tqdm
+
+import gym
+import numpy as np
+import torch
+import wandb
 
 import d4rl     # important, don't remove
 from evaluate_episodes import evaluate_episode_rtg
@@ -87,14 +88,16 @@ def experiment(
 
     # used for input normalization
     states = np.concatenate(states, axis=0)
-    state_mean, state_std = np.mean(states, axis=0), np.std(states, axis=0) + 1e-6
+    state_mean, state_std = np.mean(
+        states, axis=0), np.std(states, axis=0) + 1e-6
 
     num_timesteps = sum(traj_lens)
 
     print('=' * 50)
     print(f'Starting new experiment: {env_name} {dataset} v{env_version}')
     print(f'{len(traj_lens)} trajectories, {num_timesteps} timesteps found')
-    print(f'Average return: {np.mean(returns):.2f}, std: {np.std(returns):.2f}')
+    print(
+        f'Average return: {np.mean(returns):.2f}, std: {np.std(returns):.2f}')
     print(f'Max return: {np.max(returns):.2f}, min: {np.min(returns):.2f}')
     print('=' * 50)
 
@@ -132,7 +135,8 @@ def experiment(
             si = random.randint(0, traj['rewards'].shape[0] - 1)
 
             # get sequences from dataset
-            s.append(traj['observations'][si:si + max_len].reshape(1, -1, state_dim))
+            s.append(traj['observations']
+                     [si:si + max_len].reshape(1, -1, state_dim))
             a.append(traj['actions'][si:si + max_len].reshape(1, -1, act_dim))
             r.append(traj['rewards'][si:si + max_len].reshape(1, -1, 1))
             if 'terminals' in traj:
@@ -140,28 +144,44 @@ def experiment(
             else:
                 d.append(traj['dones'][si:si + max_len].reshape(1, -1))
             timesteps.append(np.arange(si, si + s[-1].shape[1]).reshape(1, -1))
-            timesteps[-1][timesteps[-1] >= max_ep_len] = max_ep_len-1  # padding cutoff
-            rtg.append(discount_cumsum(traj['rewards'][si:], gamma=1.)[:s[-1].shape[1] + 1].reshape(1, -1, 1))
+            timesteps[-1][timesteps[-1] >=
+                          max_ep_len] = max_ep_len-1  # padding cutoff
+            rtg.append(discount_cumsum(traj['rewards'][si:], gamma=1.)[
+                       :s[-1].shape[1] + 1].reshape(1, -1, 1))
             if rtg[-1].shape[1] <= s[-1].shape[1]:
-                rtg[-1] = np.concatenate([rtg[-1], np.zeros((1, 1, 1))], axis=1)
+                rtg[-1] = np.concatenate([rtg[-1],
+                                         np.zeros((1, 1, 1))], axis=1)
 
             # padding and state + reward normalization
             tlen = s[-1].shape[1]
-            s[-1] = np.concatenate([np.zeros((1, max_len - tlen, state_dim)), s[-1]], axis=1)
+            s[-1] = np.concatenate([np.zeros((1, max_len -
+                                   tlen, state_dim)), s[-1]], axis=1)
             s[-1] = (s[-1] - state_mean) / state_std
-            a[-1] = np.concatenate([np.ones((1, max_len - tlen, act_dim)) * -10., a[-1]], axis=1)
-            r[-1] = np.concatenate([np.zeros((1, max_len - tlen, 1)), r[-1]], axis=1)
-            d[-1] = np.concatenate([np.ones((1, max_len - tlen)) * 2, d[-1]], axis=1)
-            rtg[-1] = np.concatenate([np.zeros((1, max_len - tlen, 1)), rtg[-1]], axis=1) / scale
-            timesteps[-1] = np.concatenate([np.zeros((1, max_len - tlen)), timesteps[-1]], axis=1)
-            mask.append(np.concatenate([np.zeros((1, max_len - tlen)), np.ones((1, tlen))], axis=1))
+            a[-1] = np.concatenate([np.ones((1, max_len -
+                                   tlen, act_dim)) * -10., a[-1]], axis=1)
+            r[-1] = np.concatenate([np.zeros((1, max_len -
+                                   tlen, 1)), r[-1]], axis=1)
+            d[-1] = np.concatenate([np.ones((1, max_len - tlen))
+                                   * 2, d[-1]], axis=1)
+            rtg[-1] = np.concatenate([np.zeros((1, max_len - tlen, 1)),
+                                     rtg[-1]], axis=1) / scale
+            timesteps[-1] = np.concatenate(
+                [np.zeros((1, max_len - tlen)), timesteps[-1]], axis=1)
+            mask.append(np.concatenate(
+                [np.zeros((1, max_len - tlen)), np.ones((1, tlen))], axis=1))
 
-        s = torch.from_numpy(np.concatenate(s, axis=0)).to(dtype=torch.float32, device=device)
-        a = torch.from_numpy(np.concatenate(a, axis=0)).to(dtype=torch.float32, device=device)
-        r = torch.from_numpy(np.concatenate(r, axis=0)).to(dtype=torch.float32, device=device)
-        d = torch.from_numpy(np.concatenate(d, axis=0)).to(dtype=torch.long, device=device)
-        rtg = torch.from_numpy(np.concatenate(rtg, axis=0)).to(dtype=torch.float32, device=device)
-        timesteps = torch.from_numpy(np.concatenate(timesteps, axis=0)).to(dtype=torch.long, device=device)
+        s = torch.from_numpy(np.concatenate(s, axis=0)).to(
+            dtype=torch.float32, device=device)
+        a = torch.from_numpy(np.concatenate(a, axis=0)).to(
+            dtype=torch.float32, device=device)
+        r = torch.from_numpy(np.concatenate(r, axis=0)).to(
+            dtype=torch.float32, device=device)
+        d = torch.from_numpy(np.concatenate(d, axis=0)).to(
+            dtype=torch.long, device=device)
+        rtg = torch.from_numpy(np.concatenate(rtg, axis=0)).to(
+            dtype=torch.float32, device=device)
+        timesteps = torch.from_numpy(np.concatenate(timesteps, axis=0)).to(
+            dtype=torch.long, device=device)
         mask = torch.from_numpy(np.concatenate(mask, axis=0)).to(device=device)
 
         return s, a, r, d, rtg, timesteps, mask
@@ -284,7 +304,8 @@ def experiment(
         batch_size=batch_size,
         get_batch=get_batch,
         scheduler=scheduler,
-        loss_fn=lambda s_hat, a_hat, r_hat, s, a, r: torch.mean((a_hat - a)**2),
+        loss_fn=lambda s_hat, a_hat, r_hat, s, a, r: torch.mean(
+            (a_hat - a)**2),
         eval_fns=[eval_episodes(tar) for tar in env_targets],
     )
 
@@ -298,16 +319,30 @@ def experiment(
         # wandb.watch(model)  # wandb has some bug
 
     for iter in range(variant['max_iters']):
-        outputs = trainer.train_iteration(num_steps=variant['num_steps_per_iter'], iter_num=iter+1, print_logs=True)
+        outputs = trainer.train_iteration(
+            num_steps=variant['num_steps_per_iter'], iter_num=iter + 1, print_logs=True)
+
+        model = trainer.get_model()
+        folder_path = f"{os.getcwd()}/checkpoints/{group_name}"
+        os.makedirs(folder_path, exist_ok=True)
+
+        file_name = f"iter_{iter}.pt"
+        model_path = os.path.join(folder_path, file_name)
+        torch.save(model, model_path)
+
         if log_to_wandb:
             wandb.log(outputs)
+            model_wandb_path = os.path.join(wandb.run.dir, file_name)
+            torch.save(model, model_wandb_path)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--env', type=str, default='hopper')
-    parser.add_argument('--dataset', type=str, default='medium')  # medium, medium-replay, medium-expert, expert
-    parser.add_argument('--mode', type=str, default='normal')  # normal for standard setting, delayed for sparse
+    # medium, medium-replay, medium-expert, expert
+    parser.add_argument('--dataset', type=str, default='medium')
+    # normal for standard setting, delayed for sparse
+    parser.add_argument('--mode', type=str, default='normal')
     parser.add_argument('--K', type=int, default=20)
     parser.add_argument('--pct_traj', type=float, default=1.)
     parser.add_argument('--batch_size', type=int, default=64)
