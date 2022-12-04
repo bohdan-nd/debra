@@ -34,7 +34,7 @@ def experiment(
     env_name, dataset = variant['env'], variant['dataset']
     model_type = variant['model_type']
     env_version = variant['env_version']
-    group_name = f'{exp_prefix}-{env_name}-{dataset}'
+    group_name = f'{exp_prefix}-{env_name}-{dataset}-v{env_version}'
     exp_prefix = f'{group_name}-{random.randint(int(1e5), int(1e6) - 1)}'
 
     if env_name == 'hopper':
@@ -359,7 +359,7 @@ def experiment(
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--env', type=str, default='hopper')
-    # medium, medium-replay, medium-expert, expert
+    # medium, medium-replay, medium-expert, expert, random
     parser.add_argument('--dataset', type=str, default='medium')
     # normal for standard setting, delayed for sparse
     parser.add_argument('--mode', type=str, default='normal')
