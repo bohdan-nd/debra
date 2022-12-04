@@ -13,7 +13,7 @@ def evaluate_episode_rtg(
         state_std=1.,
         device='cuda',
         target_return=None,
-        mode='normal',
+        mode='normal'
     ):
 
     model.eval()
@@ -23,6 +23,7 @@ def evaluate_episode_rtg(
     state_std = torch.from_numpy(state_std).to(device=device)
 
     state = env.reset()
+
     if mode == 'noise':
         state = state + np.random.normal(0, 0.1, size=state.shape)
 
@@ -55,6 +56,7 @@ def evaluate_episode_rtg(
         actions[-1] = action
         action = action.detach().cpu().numpy()
 
+        env.render()
         state, reward, done, _ = env.step(action)
 
         cur_state = torch.from_numpy(state).to(device=device).reshape(1, state_dim)
