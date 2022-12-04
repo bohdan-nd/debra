@@ -1,6 +1,7 @@
 import os
 import argparse
 import pickle
+import json
 import random
 from tqdm import tqdm
 
@@ -38,33 +39,33 @@ def experiment(
 
     if env_name == 'hopper':
         if env_version == 2:
-            env = gym.make('Hopper-v2')
+            env_id = 'Hopper-v2'
         else:   # env_version == 0
-            env = gym.make(f'{env_name}-{dataset}-v0')
+            env_id = f'{env_name}-{dataset}-v0'
 
-        max_ep_len = 1000
         env_targets = [3600, 1800]  # evaluation conditioning targets
-        scale = 1000.  # normalization for rewards/returns
+
     elif env_name == 'halfcheetah':
         if env_version == 2:
-            env = gym.make('HalfCheetah-v2')
+            env_id = 'HalfCheetah-v2'
         else:   # env_version == 0
-            env = gym.make(f'{env_name}-{dataset}-v0')
+            env_id = f'{env_name}-{dataset}-v0'
 
-        max_ep_len = 1000
         env_targets = [12000, 6000]
-        scale = 1000.
+
     elif env_name == 'walker2d':
         if env_version == 2:
-            env = gym.make('Walker2d-v2')
+            env_id = 'Walker2d-v2'
         else:   # env_version == 0
-            env = gym.make(f'{env_name}-{dataset}-v0')
+            env_id = f'{env_name}-{dataset}-v0'
 
-        max_ep_len = 1000
         env_targets = [5000, 2500]
-        scale = 1000.
     else:
         raise NotImplementedError
+
+    env = gym.make(env_id)
+    max_ep_len = 1000
+    scale = 1000.
 
     state_dim = env.observation_space.shape[0]
     act_dim = env.action_space.shape[0]
@@ -318,15 +319,34 @@ def experiment(
         )
         # wandb.watch(model)  # wandb has some bug
 
-    for iter in range(variant['max_iters']):
+    folder_path = f"{os.getcwd()}/checkpoints/{group_name}"
+    os.makedirs(folder_path, exist_ok=True)
+    
+    experiment_parameters = {
+        "env_id": env_id,
+        "state_dim": state_dim,
+        "act_dim": act_dim,
+        "max_ep_len": max_ep_len,
+        "scale": scale,
+        "env_targets": env_targets,
+        "mode": mode,
+        "state_mean": state_mean,
+        "state_std": state_std,
+    }
+
+    with open(f'{folder_path}/config.json', 'w', encoding='utf-8') as file:
+        json.dump(experiment_parameters, file)
+    
+    if log_to_wandb:
+        with open(os.path.join(wandb.run.dir, "config.json"), 'w', encoding='utf-8') as file:
+            json.dump(experiment_parameters, file)
+
+    for iter_ in range(variant['max_iters']):
         outputs = trainer.train_iteration(
-            num_steps=variant['num_steps_per_iter'], iter_num=iter + 1, print_logs=True)
+            num_steps=variant['num_steps_per_iter'], iter_num=iter_ + 1, print_logs=True)
 
         model = trainer.get_model()
-        folder_path = f"{os.getcwd()}/checkpoints/{group_name}"
-        os.makedirs(folder_path, exist_ok=True)
-
-        file_name = f"iter_{iter}.pt"
+        file_name = f"iter_{iter_}.pt"
         model_path = os.path.join(folder_path, file_name)
         torch.save(model, model_path)
 
