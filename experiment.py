@@ -34,7 +34,7 @@ def experiment(
     env_name, dataset = variant['env'], variant['dataset']
     model_type = variant['model_type']
     env_version = variant['env_version']
-    group_name = f'{exp_prefix}-{env_name}-{dataset}'
+    group_name = f'{model_type}-{env_name}-{dataset}'
     exp_prefix = f'{group_name}-v{env_version}-{random.randint(int(1e5), int(1e6) - 1)}'
 
     if env_name == 'hopper':
@@ -319,7 +319,7 @@ def experiment(
         )
         # wandb.watch(model)  # wandb has some bug
 
-    folder_path = f"{os.getcwd()}/checkpoints/{group_name}"
+    folder_path = f"{os.getcwd()}/checkpoints/{group_name}-v{env_version}"
     os.makedirs(folder_path, exist_ok=True)
     
     experiment_parameters = {
@@ -330,6 +330,9 @@ def experiment(
         "mode": mode,
         "dataset_path": dataset_path
     }
+
+    np.save(f"{folder_path}/state_mean", state_mean)
+    np.save(f"{folder_path}/state_std", state_std)
 
     with open(f'{folder_path}/config.json', 'w', encoding='utf-8') as file:
         json.dump(experiment_parameters, file)
