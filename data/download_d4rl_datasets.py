@@ -10,8 +10,10 @@ import d4rl		# important, don't remove this
 datasets = []
 
 for env_name in ['halfcheetah', 'hopper', 'walker2d']:
-	for dataset_type in ['medium', 'medium-replay', 'medium-expert', 'expert']:
-		name = f'{env_name}-{dataset_type}-v0'
+	#for dataset_type in ['medium', 'medium-replay', 'medium-expert', 'expert']:
+	for dataset_type in ['random']:
+
+		name = f'{env_name}-{dataset_type}-v2'
 		env = gym.make(name)
 		dataset = env.get_dataset()
 
