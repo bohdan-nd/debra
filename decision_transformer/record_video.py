@@ -4,7 +4,7 @@ import numpy as np
 import gym
 import argparse
 
-from evaluate_episodes import evaluate_episode_rtg
+from decision_transformer.evaluate_episodes import evaluate_episode_rtg
 
 
 def record_video(folder_path, model_file_name):

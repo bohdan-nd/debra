@@ -4,3 +4,7 @@ logs/
 old-checkpoints/
 run.sh
 wandb/
+.vscode/
+.ipynb_checkpoints/
+.DS_Store
+checkpoints/

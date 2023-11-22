@@ -11,9 +11,9 @@ import torch
 import wandb
 
 import d4rl     # important, don't remove
-from evaluate_episodes import evaluate_episode_rtg
-from decision_transformer import DecisionTransformer
-from trainer import Trainer
+from decision_transformer.evaluate_episodes import evaluate_episode_rtg
+from decision_transformer.decision_transformer import DecisionTransformer
+from decision_transformer.trainer import Trainer
 
 
 def discount_cumsum(x, gamma):
