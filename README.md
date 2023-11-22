@@ -3,7 +3,20 @@
 
 Bohdan Naida, Kateryna Nekhomiazh, Mariia Rizhko.
 
-Project report can be found [here](./DEBRA_Final_Report.pdf).
+The project report can be found [here](./DEBRA_Final_Report.pdf).
+
+## Overview
+DEBRA is a research project focused on analyzing the Decision Transformer (DT) model, a GPT-based architecture developed for solving Reinforcement Learning tasks. The main goal was to critically evaluate the Decision Transformer on various MuJoCo environments, investigate its training stability, and compare it with Conservative Q-Learning (CQL).
+
+## Key Findings
+- **Analysis of Decision Transformer:** The original DT paper was scrutinized for inconsistencies in implementation and evaluation. The DT's performance in different versions of gym MuJoCo environments, such as HalfCheetah, Hopper, and Walker2d, was assessed.
+
+- **Training Stability:** The study identified issues with the training stability of the DT, noting that the performance fluctuated significantly during training.
+- **Comparison with CQL:** DEBRA compares the DT with CQL, revealing that CQL often outperforms DT in various environments, especially in terms of training stability.
+
+# Limitations and Future Work
+- **Performance in Stochastic Environments:** A Significant limitation identified was the DT's inability to perform reliably in stochastic environments.
+- **Lack of Explainability:** The DT, like many machine learning models, lacks explainability, making it challenging to understand and trust its decision-making process.
 
 ## Installation
 
@@ -40,3 +53,5 @@ Possible options:
 --env_version: 0, 2
 --model_type: dt, debra, rodebra, badebra, debraxl
 ```
+
+
