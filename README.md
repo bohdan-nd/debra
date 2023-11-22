@@ -3,7 +3,7 @@
 
 Bohdan Naida, Kateryna Nekhomiazh, Mariia Rizhko.
 
-Project report can be found [here](./DEBRA_Final_Progress_Report.pdf).
+Project report can be found [here](./DEBRA_Final_Report.pdf).
 
 ## Installation
 
